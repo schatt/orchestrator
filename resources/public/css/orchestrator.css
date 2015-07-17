@@ -164,6 +164,17 @@
     color: inherit;
 }
 
+
+#instance_problems button.btn-stale {
+    background-color: #808080;
+    color: #ffffff;
+}
+
+#instance_problems button.btn-fatal {
+    background-color: #000000;
+    color: #ffffff;
+}
+
 #instance_problems .popover.instance {
     font: 10px sans-serif;
     display: block;
@@ -185,6 +196,20 @@
 
 #instance_problems .popover.instance div.popover-content {
     padding: 4px 8px;
+}
+
+#pools .popover div.pool-instances-listing {
+    font: 12px sans-serif;
+}
+
+#pools .popover div.pool-instances-listing div {
+    margin-top: 8px;
+}
+
+
+
+#node_modal .modal-title {
+    font: 12px sans-serif;
 }
 
 #node_modal .modal-content {
@@ -210,7 +235,7 @@
     margin-left: 4px;
 }
 
-div[data-btn-group=recover] code {
+.popover-footer div.dropdown code {
     color: inherit;
 	background-color: inherit;
 }
@@ -266,7 +291,6 @@ div[data-btn-group=recover] code {
     border-color: #dddddd;
 }
 
-
 .popover-footer {
   padding: 8px 14px;
   margin: 0;
@@ -277,6 +301,49 @@ div[data-btn-group=recover] code {
   border-bottom: 1px solid #ebebeb;
   border-radius: 0 0 5px 5px;
 }
+
+#cluster_sidebar {
+	float:left;
+	position: absolute;
+}
+
+#cluster_sidebar li {
+	font-size: 1.2em;
+}
+
+#cluster_sidebar li > div > span {
+	cursor: pointer;
+}
+
+#cluster_sidebar li span.glyphicon {
+	font-size: 2em;
+}
+
+#cluster_sidebar .nav li > a {
+	padding: 0;
+	
+}
+
+#cluster_sidebar .nav li a:hover {
+	background-color: inherit;
+}
+
+#cluster_sidebar li .popover {
+	max-width: 640px;
+	width: 640px;
+	font: 12px sans-serif;	
+}
+
+#cluster_sidebar li .popover hr {
+	margin-top: 8px;
+	margin-bottom: 8px;	
+}
+
+#cluster_sidebar li .popover pre {
+	margin-top: 8px;
+	margin-bottom: 8px;	
+}
+
 #cluster_container .popover.instance {
     font: 10px sans-serif;
     display: block;
@@ -285,6 +352,10 @@ div[data-btn-group=recover] code {
     cursor: move;
 }
 
+#clusters_analysis .popover {
+	width: 430px;
+	max-width: 430px;
+}
 
 #cluster_container .popover.instance div.popover-content {
     padding: 4px 8px;
@@ -340,9 +411,54 @@ div[data-btn-group=recover] code {
 	z-index: -1;
 	font-size: 50px;
 	color: #d0d0d0;
+	padding-left: 32px;
 }
 
 #cluster_container {
     overflow: auto;
 }
 
+.container.clusters .popover.instance {
+    display: inline-block;
+    position: inherit;
+    width: 276px;
+}
+
+.container.clusters .popover.instance {
+   margin: 8px;
+}
+
+.container.clusters .popover.instance p {
+   margin: 8px 0px;
+}
+
+
+.container.clusters .popover.instance code {
+	white-space: normal;
+	color: inherit;
+	background-color: inherit;
+}
+
+
+.container.clusters .popover.instance .popover-content span {
+    font: 12px sans-serif;
+}
+.container.clusters .popover.instance .popover-content div.downtimed {
+    background-color: #e7e7e7;
+}
+
+.container.clusters .popover.instance .popover-content span.badge {
+    color: #ffffff;
+    font-size: 10px;
+    font-weight: bold;
+}
+
+
+#orchestratorStatusTable {
+    font: 12px sans-serif;
+}
+
+#orchestratorStatusTable code {
+	font-size: 100%;
+	background-color: inherit;
+}

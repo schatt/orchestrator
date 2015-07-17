@@ -1,8 +1,32 @@
-clusterOperationPseudoGTIDMode = false;
+clusterOperationPseudoGTIDMode = ($.cookie("operation-pgtid-mode") == "true");
 
-var dcColors = ["#ff8c00", "#4682b4", "#9acd32", "#dc143c", "#9932cc", "#ffd700", "#191970", "#7fffd4", "#808080", "#dda0dd"];
+var renderColors = ["#ff8c00", "#4682b4", "#9acd32", "#dc143c", "#9932cc", "#ffd700", "#191970", "#7fffd4", "#808080", "#dda0dd"];
 var dcColorsMap = {};
 
+
+function getInstanceDiv(instanceId) {
+    var popoverDiv = $("[data-fo-id='" + instanceId + "'] div.popover");
+	return popoverDiv
+}
+
+function repositionIntanceDivs() {
+    $("[data-fo-id]").each(
+            function () {
+                var id = $(this).attr("data-fo-id");
+                var popoverDiv = getInstanceDiv(id);
+
+                popoverDiv.attr("x", $(this).attr("x"));
+                $(this).attr("y",
+                    0 - popoverDiv.height() / 2 - 2);
+                popoverDiv.attr("y", $(this).attr("y"));
+                $(this).attr("width",
+                    popoverDiv.width() + 30);
+                $(this).attr("height",
+                    popoverDiv.height() +16);
+            });	
+    $("div.popover").popover();
+    $("div.popover").show();
+}
 
 function generateInstanceDivs(nodesMap) {
     nodesList = []
@@ -19,27 +43,10 @@ function generateInstanceDivs(nodesMap) {
         }
     });
     nodesList.forEach(function (node) {
-    	var popoverElement = $("[data-fo-id='" + node.id + "'] .popover");
+    	var popoverElement = getInstanceDiv(node.id);
    		renderInstanceElement(popoverElement, node, "cluster");
     });
-    $("[data-fo-id]").each(
-        function () {
-            var id = $(this).attr("data-fo-id");
-            var popoverDiv = $("[data-fo-id='" + id + "'] div.popover");
 
-            popoverDiv.attr("x", $(this).attr("x"));
-            $(this).attr("y",
-                0 - popoverDiv.height() / 2 - 2);
-            popoverDiv.attr("y", $(this).attr("y"));
-            $(this).attr("width",
-                popoverDiv.width() + 30);
-            $(this).attr("height",
-                popoverDiv.height() +16);
-        });
-    $("div.popover").popover();
-    $("div.popover").show();
-    
-   	
     $("[data-fo-id]").on("mouseenter", ".popover[data-nodeid]", function() {
     	if ($(".popover.instance[data-duplicate-node]").hasClass("ui-draggable-dragging")) {
     		// Do not remove & recreate while dragging. Ignore any mouseenter
@@ -56,6 +63,7 @@ function generateInstanceDivs(nodesMap) {
     	$(duplicate).css($(this).offset());
     	$(duplicate).width($(this).width());
     	$(duplicate).height($(this).height());
+    	$(duplicate).find(".dropdown-toggle").dropdown();
     	$(duplicate).popover();
         $(duplicate).show();
         $(".popover.instance[data-duplicate-node] h3 a").click(function () {
@@ -63,19 +71,28 @@ function generateInstanceDivs(nodesMap) {
         	return false;
         });
         $(".popover.instance[data-duplicate-node] a[data-command=recover-auto]").click(function () {
-        	return apiCommand("/api/recover/"+nodesMap[draggedNodeId].Key.Hostname+"/"+nodesMap[draggedNodeId].Key.Port);
-
+        	apiCommand("/api/recover/"+nodesMap[draggedNodeId].Key.Hostname+"/"+nodesMap[draggedNodeId].Key.Port);
+        	return true;
         });
         $(".popover.instance[data-duplicate-node] a[data-command=match-up-slaves]").click(function () {
-        	return apiCommand("/api/match-up-slaves/"+nodesMap[draggedNodeId].Key.Hostname+"/"+nodesMap[draggedNodeId].Key.Port);
+        	apiCommand("/api/match-up-slaves/"+nodesMap[draggedNodeId].Key.Hostname+"/"+nodesMap[draggedNodeId].Key.Port);
+        	return true;
         });
         $(".popover.instance[data-duplicate-node] a[data-command=regroup-slaves]").click(function () {
-        	return apiCommand("/api/regroup-slaves/"+nodesMap[draggedNodeId].Key.Hostname+"/"+nodesMap[draggedNodeId].Key.Port);
+        	apiCommand("/api/regroup-slaves/"+nodesMap[draggedNodeId].Key.Hostname+"/"+nodesMap[draggedNodeId].Key.Port);
+        	return true;
+        });
+        $(".popover.instance[data-duplicate-node] a[data-command=recover-suggested-successor]").click(function (event) {
+            var suggestedSuccessorHost = $(event.target).attr("data-suggested-successor-host");
+            var suggestedSuccessorPort = $(event.target).attr("data-suggested-successor-port");
+        	apiCommand("/api/recover/"+nodesMap[draggedNodeId].Key.Hostname+"/"+nodesMap[draggedNodeId].Key.Port+"/"+suggestedSuccessorHost+"/"+suggestedSuccessorPort);
+        	return true;
         });
         $(".popover.instance[data-duplicate-node] a[data-command=multi-match-slaves]").click(function (event) {
             var belowHost = $(event.target).attr("data-below-host");
             var belowPort = $(event.target).attr("data-below-port");
-        	return apiCommand("/api/multi-match-slaves/"+nodesMap[draggedNodeId].Key.Hostname+"/"+nodesMap[draggedNodeId].Key.Port+"/"+belowHost+"/"+belowPort);
+        	apiCommand("/api/multi-match-slaves/"+nodesMap[draggedNodeId].Key.Hostname+"/"+nodesMap[draggedNodeId].Key.Port+"/"+belowHost+"/"+belowPort);
+        	return true;
         });
         $(".popover.instance[data-duplicate-node] button[data-command=make-master]").click(function () {
         	makeMaster(nodesMap[draggedNodeId]);
@@ -161,8 +178,21 @@ function moveInstance(node, droppableNode, shouldApply) {
     	// Obviously this is also checked on server side, no need to try stupid hacks
 		return null;
     }
+    var isUsingGTID = (node.usingGTID && droppableNode.usingGTID);
+    var gtidBelowFunc = null
 	if (clusterOperationPseudoGTIDMode) {
+		// definitely peudo-gtid match
+		gtidBelowFunc = matchBelow
+	} else if (isUsingGTID) {
+		//gtidBelowFunc = moveBelow
+	}
+	if (gtidBelowFunc != null) {
+		// Moving via GTID or Pseudo GTID
 		if (node.hasConnectivityProblem || droppableNode.hasConnectivityProblem || droppableNode.isAggregate) {
+			// Obviously can't handle.
+			return null;
+		}
+		if (!droppableNode.LogSlaveUpdatesEnabled) {
 			// Obviously can't handle.
 			return null;
 		}
@@ -174,38 +204,34 @@ function moveInstance(node, droppableNode, shouldApply) {
 			// Wrong direction!
 			return null;
 		}
-		if (isReplicationStrictlyBehindSibling(droppableNode, node)) {
-			// Sibling known to be less advanced. Wrong direction!
-			return null;
-		}
 		if (instanceIsDescendant(node, droppableNode)) {
 			// clearly node cannot be more up to date than droppableNode
 			if (shouldApply) {
-				matchBelow(node, droppableNode);
+				gtidBelowFunc(node, droppableNode);
 			}
 			return "ok";
 		}
 		if (isReplicationBehindSibling(node, droppableNode)) {
 			// verified that node isn't more up to date than droppableNode
 			if (shouldApply) {
-				matchBelow(node, droppableNode);
+				gtidBelowFunc(node, droppableNode);
 			}
 			return "ok";
 		}
 		// TODO: the general case, where there's no clear family connection, meaning we cannot infer
 		// which instance is more up to date. It's under the user's responsibility!
 		if (shouldApply) {
-			matchBelow(node, droppableNode);
+			gtidBelowFunc(node, droppableNode);
 		}
 		return "warning";
 	}
-	// Not pseudo-GTID mode
+	// Not pseudo-GTID mode, non GTID mode
 	if (node.isCoMaster) {
 		// Cannot move. RESET SLAVE on one of the co-masters.
 		return null;
 	}
 	if (instancesAreSiblings(node, droppableNode)) {
-		if (node.hasProblem || droppableNode.hasProblem || droppableNode.isAggregate) {
+		if (node.hasProblem || droppableNode.hasProblem || droppableNode.isAggregate || !droppableNode.LogSlaveUpdatesEnabled) {
 			return null;
 		}
 		if (shouldApply) {
@@ -226,6 +252,20 @@ function moveInstance(node, droppableNode, shouldApply) {
 		}
 		if (shouldApply) {
 			moveUp(node, droppableNode);
+		}
+		return "ok";
+	}
+	if (instanceIsChild(node, droppableNode) && !droppableNode.isMaster) {
+		if (node.hasProblem) {
+			// Typically, when a node has a problem we do not allow moving it up.
+			// But there's a special situation when allowing is desired: when
+			// this slave is completely caught up;
+			if (!node.isSQLThreadCaughtUpWithIOThread) { 
+				return null;
+			}
+		}
+		if (shouldApply) {
+			enslaveMaster(node, droppableNode);
 		}
 		return "ok";
 	}
@@ -253,7 +293,7 @@ function moveInstance(node, droppableNode, shouldApply) {
 }
 
 function moveBelow(node, siblingNode) {
-	var message = "Are you sure you wish to turn <code><strong>" + 
+	var message = "<h4>move-below</h4>Are you sure you wish to turn <code><strong>" + 
 		node.Key.Hostname + ":" + node.Key.Port +
 		"</strong></code> into a slave of <code><strong>" +
 		siblingNode.Key.Hostname + ":" + siblingNode.Key.Port +
@@ -279,7 +319,7 @@ function moveBelow(node, siblingNode) {
 
 
 function moveUp(node, grandparentNode) {
-	var message = "Are you sure you wish to turn <code><strong>" + 
+	var message = "<h4>move-up</h4>Are you sure you wish to turn <code><strong>" + 
 		node.Key.Hostname + ":" + node.Key.Port +
 		"</strong></code> into a slave of <code><strong>" +
 		grandparentNode.Key.Hostname + ":" + grandparentNode.Key.Port +
@@ -303,8 +343,33 @@ function moveUp(node, grandparentNode) {
 }
 
 
+
+function enslaveMaster(node, masterNode) {
+	var message = "<h4>enslave-master</h4>Are you sure you wish to make <code><strong>" + 
+		node.Key.Hostname + ":" + node.Key.Port +
+		"</strong></code> master of <code><strong>" +
+		masterNode.Key.Hostname + ":" + masterNode.Key.Port +
+		"</strong></code>?"
+	bootbox.confirm(message, function(confirm) {
+		if (confirm) {
+			showLoader();
+			var apiUrl = "/api/enslave-master/" + node.Key.Hostname + "/" + node.Key.Port;
+		    $.get(apiUrl, function (operationResult) {
+	    			hideLoader();
+	    			if (operationResult.Code == "ERROR") {
+	    				addAlert(operationResult.Message)
+	    			} else {
+	    				reloadWithOperationResult(operationResult);
+	    			}	
+	            }, "json");					
+		}
+		$("#cluster_container .accept_drop").removeClass("accept_drop");
+	}); 
+	return false;
+}
+
 function makeCoMaster(node, childNode) {
-	var message = "Are you sure you wish to make <code><strong>" + 
+	var message = "<h4>make-co-master</h4>Are you sure you wish to make <code><strong>" + 
 		node.Key.Hostname + ":" + node.Key.Port +
 		"</strong></code> and <code><strong>" +
 		childNode.Key.Hostname + ":" + childNode.Key.Port +
@@ -330,7 +395,7 @@ function makeCoMaster(node, childNode) {
 
 
 function matchBelow(node, otherNode) {
-	var message = "<h4>PSEUDO-GTID MODE</h4>Are you sure you wish to turn <code><strong>" + 
+	var message = "<h4>PSEUDO-GTID MODE, match-below</h4>Are you sure you wish to turn <code><strong>" + 
 		node.Key.Hostname + ":" + node.Key.Port +
 		"</strong></code> into a slave of <code><strong>" +
 		otherNode.Key.Hostname + ":" + otherNode.Key.Port +
@@ -506,7 +571,7 @@ function analyzeClusterInstances(nodesMap) {
 
     instances.forEach(function (instance) {
 	    if (instance.hasConnectivityProblem) {
-	    	// The instance has a connectivity problem! Do a client-size recommendation of most advanced slave:
+	    	// The instance has a connectivity problem! Do a client-side recommendation of most advanced slave:
 	    	// a direct child of the master, with largest exec binlog coordinates.
 	    	var sortedChildren = instance.children.slice(); 
 	    	sortedChildren.sort(compareInstancesExecBinlogCoordinates)
@@ -546,12 +611,13 @@ function postVisualizeInstances(nodesMap) {
     }
     knownDCs = uniq(knownDCs);
     for (i = 0 ; i < knownDCs.length ; ++i) {
-        dcColorsMap[knownDCs[i]] = dcColors[i % dcColors.length];
+        dcColorsMap[knownDCs[i]] = renderColors[i % renderColors.length];
     }
     instances.forEach(function (instance) {
     	var draggedNodeId = $(this).attr("data-nodeid"); 
     	$(".popover.instance[data-nodeid="+instance.id+"]").attr("data-dc-color", dcColorsMap[instance.DataCenter]);
     });
+    repositionIntanceDivs()
 }
 
 
@@ -631,6 +697,18 @@ function promptForAlias(oldAlias) {
 	}); 
 }
 
+function showOSCSlaves() {
+    $.get("/api/cluster-osc-slaves/"+currentClusterName(), function (instances) {
+		var instancesMap = normalizeInstances(instances, Array());
+		var instancesTitles = Array();
+	    instances.forEach(function (instance) {
+	    	instancesTitles.push(instance.title);
+	    });
+	    var instancesTitlesConcatenates = instancesTitles.join(" ");
+	    bootbox.alert("Heuristic list of OSC controller slaves: <pre>"+instancesTitlesConcatenates+"</pre>");
+    }, "json");
+}
+
 function anonymize() {
     var _ = function() {
         var counter = 0;  
@@ -646,10 +724,168 @@ function anonymize() {
 	$("#cluster_container div.floating_background").html("");	
 }
 
+function colorize_dc() {
+    $(".popover.instance[data-dc-color]").each(function () {
+        $(this).css("border-color", $(this).attr("data-dc-color"));
+        $(this).css("border-width", 2);
+    });	
+}
+
+function addSidebarInfoPopoverContent(content, prepend) {
+	if (prepend === true) {
+		var wrappedContent = '<div>'+content+'</div>';
+		$("#cluster_sidebar [data-bullet=info] [data-toggle=popover]").attr("data-content",
+			wrappedContent + $("#cluster_sidebar [data-bullet=info] [data-toggle=popover]").attr("data-content"));
+		
+	} else {
+		var wrappedContent = '<div><hr/>'+content+'</div>';
+		$("#cluster_sidebar [data-bullet=info] [data-toggle=popover]").attr("data-content",
+			$("#cluster_sidebar [data-bullet=info] [data-toggle=popover]").attr("data-content") + wrappedContent);
+	}
+}
+
+function populateSidebar(clusterInfo) {
+	var content = '';
+
+	{
+		var content = 'Alias: '+clusterInfo.ClusterAlias+'';
+		addSidebarInfoPopoverContent(content, false);
+	}
+	{
+		var content = 'Heuristic lag: '+clusterInfo.HeuristicLag+'s';
+		addSidebarInfoPopoverContent(content, false);
+	}
+	{
+		var content = '';
+		if (clusterInfo.HasAutomatedMasterRecovery === true) {
+			content += '<span class="glyphicon glyphicon-heart text-info" title="Automated master recovery for this cluster ENABLED"></span>';
+		} else {
+			content += '<span class="glyphicon glyphicon-heart text-muted" title="Automated master recovery for this cluster DISABLED"></span>';
+		}
+		if (clusterInfo.HasAutomatedIntermediateMasterRecovery === true) {
+			content += '<span class="glyphicon glyphicon-heart-empty text-info" title="Automated intermediate master recovery for this cluster ENABLED"></span>';
+		} else {
+			content += '<span class="glyphicon glyphicon-heart-empty text-muted" title="Automated intermediate master recovery for this cluster DISABLED"></span>';
+		}
+		addSidebarInfoPopoverContent(content, true);
+	}
+}
+
+function onAnalysisEntry(analysisEntry, instance) {
+	var content = '<span><strong>'+analysisEntry.Analysis 
+		+ (analysisEntry.IsDowntimed ? '<br/>[<i>downtime till '+analysisEntry.DowntimeEndTimestamp+'</i>]': '')
+		+ "</strong></span>" 
+		+ "<br/>" + "<span>" + analysisEntry.AnalyzedInstanceKey.Hostname+":"+analysisEntry.AnalyzedInstanceKey.Port+ "</span>" 
+	;
+	addSidebarInfoPopoverContent(content);        
+	
+	var popoverElement = getInstanceDiv(instance.id);
+
+	popoverElement.append('<h4 class="popover-footer"><div class="dropdown"></div></h4>');
+	popoverElement.find(".popover-footer .dropdown").append('<button type="button" class="btn btn-xs btn-default dropdown-toggle" id="recover_dropdown_'+instance.id+'" data-toggle="dropdown" aria-haspopup="true" aria-expanded="true"><span class="glyphicon glyphicon-heart text-danger"></span> Recover <span class="caret"></span></button><ul class="dropdown-menu" aria-labelledby="recover_dropdown_'+instance.id+'"></ul>');
+	popoverElement.find(".popover-footer .dropdown").append('<ul class="dropdown-menu" aria-labelledby="recover_dropdown_'+instance.id+'"></ul>');
+	var recoveryListing = popoverElement.find(".dropdown ul");
+    recoveryListing.append('<li><a href="#" data-btn="auto" data-command="recover-auto">Auto (implies running external hooks/processes)</a></li>');
+    recoveryListing.append('<li role="separator" class="divider"></li>');
+    
+    if (!instance.isMaster) {
+        recoveryListing.append('<li><a href="#" data-btn="match-up-slaves" data-command="match-up-slaves">Match up slaves to <code>'+instance.masterTitle+'</code></a></li>');
+    }
+    if (instance.children.length > 1) {
+    	recoveryListing.append('<li><a href="#" data-btn="regroup-slaves" data-command="regroup-slaves">Regroup slaves (auto pick best slave, only heals topology, no external processes)</a></li>');
+    }
+    if (instance.isMaster) {
+    	// Suggest successor
+	    instance.children.forEach(function(slave) {
+            if (!slave.LogBinEnabled) {
+                return
+            }
+            if (slave.SQLDelay > 0) {
+                return
+            }
+            if (!slave.LogSlaveUpdatesEnabled) {
+                return
+            }
+            if (slave.lastCheckInvalidProblem()) {
+                return
+            }
+            if (slave.notRecentlyCheckedProblem()) {
+                return
+            }
+            recoveryListing.append(
+                '<li><a href="#" data-btn="recover-suggested-successor" data-command="recover-suggested-successor" data-suggested-successor-host="'+slave.Key.Hostname
+                +'" data-suggested-successor-port="'+slave.Key.Port+'">Regroup slaves, try to promote <code>'+slave.title+'</code></a></li>');
+        });                 
+    }
+    if (instance.masterNode) {
+    	// Intermediate master; suggest successor
+	    instance.masterNode.children.forEach(function(sibling) {
+            if (sibling.id == instance.id) {
+                return
+            }
+            if (!sibling.LogBinEnabled) {
+                return
+            }
+            if (!sibling.LogSlaveUpdatesEnabled) {
+                return
+            }
+            if (sibling.lastCheckInvalidProblem()) {
+                return
+            }
+            if (sibling.notRecentlyCheckedProblem()) {
+                return
+            }
+            recoveryListing.append(
+                '<li><a href="#" data-btn="multi-match-slaves" data-command="multi-match-slaves" data-below-host="'+sibling.Key.Hostname
+                +'" data-below-port="'+sibling.Key.Port+'">Match all slaves below <code>'+sibling.title+'</code></a></li>');
+        });                 
+    }
+}
+
+
+function reviewReplicationAnalysis(replicationAnalysis, instancesMap) {
+	var clusterHasReplicationAnalysisIssue = false;
+    replicationAnalysis.Details.forEach(function (analysisEntry) {
+    	if (!(analysisEntry.Analysis in interestingAnalysis)) {
+    		return;
+    	}
+    	if (analysisEntry.ClusterDetails.ClusterName == currentClusterName()) {
+    		clusterHasReplicationAnalysisIssue = true;
+    		
+    		var instanceId = getInstanceId(analysisEntry.AnalyzedInstanceKey.Hostname, analysisEntry.AnalyzedInstanceKey.Port);
+    		var instance = instancesMap[instanceId]
+    		onAnalysisEntry(analysisEntry, instance);
+    	}
+    });
+    if (clusterHasReplicationAnalysisIssue) {
+		$("#cluster_sidebar [data-bullet=info] div span").addClass("text-danger");
+    } else {
+    	$("#cluster_sidebar [data-bullet=info] div span").addClass("text-info");
+    }	
+}
+
+
+function indicateClusterPoolInstances(clusterPoolInstances, instancesMap) {
+	for (var pool in clusterPoolInstances.Details) {
+		if (clusterPoolInstances.Details.hasOwnProperty(pool)) {
+			clusterPoolInstances.Details[pool].forEach(function(instanceKey) {
+				var instanceId = getInstanceId(instanceKey.Hostname, instanceKey.Port)
+				var instance  = instancesMap[instanceId];
+				if (!instance.IsInPool) {
+					instance.IsInPool = true;
+					getInstanceDiv(instance.id).find("h3 div.pull-right").prepend('<span class="glyphicon glyphicon-tint" title="pools:"></span> ');
+				}
+				var indicatorElement = getInstanceDiv(instance.id).find("h3 div.pull-right span.glyphicon-tint");
+				indicatorElement.attr("title", indicatorElement.attr("title") + " " + pool);
+			});
+		}
+	}
+}
+
 $(document).ready(function () {
     $.get("/api/cluster/"+currentClusterName(), function (instances) {
-        $.get("/api/maintenance",
-            function (maintenanceList) {
+        $.get("/api/replication-analysis", function (replicationAnalysis) {
+        	$.get("/api/maintenance", function (maintenanceList) {
         		var instancesMap = normalizeInstances(instances, maintenanceList);
         	    if (isCompactDisplay()) {
         	    	instancesMap = compactInstances(instances, instancesMap);
@@ -657,29 +893,83 @@ $(document).ready(function () {
                 analyzeClusterInstances(instancesMap);
                 visualizeInstances(instancesMap);
                 generateInstanceDivs(instancesMap);
+                reviewReplicationAnalysis(replicationAnalysis, instancesMap);
                 postVisualizeInstances(instancesMap);
                 if ($.cookie("anonymize") == "true") {
                 	anonymize();
                 }
-            }, "json");
+                if ($.cookie("colorize-dc") == "true") {
+                	colorize_dc();
+                }
+                
+                instances.forEach(function (instance) {
+                	if (instance.isMaster) {
+                	    $.get("/api/recently-active-instance-recovery/"+ instance.Key.Hostname + "/" + instance.Key.Port, function (recoveries) {
+                	        // Result is an array: either empty (no active recovery) or with multiple entries
+                	    	recoveries.forEach(function (recoveryEntry) {
+                	    		addInfo("<strong>" + instance.title + "</strong> has just recently been promoted as result of <strong>" + recoveryEntry.AnalysisEntry.Analysis + "</strong>. It may still take some time to rebuild topology graph.");
+                	        });
+                	    }, "json");                		
+                    }
+                });            
+                if ($.cookie("pool-indicator") == "true") {
+                    $.get("/api/cluster-pool-instances/" + currentClusterName(), function (clusterPoolInstances) {
+               	    	indicateClusterPoolInstances(clusterPoolInstances, instancesMap);
+                    }, "json");                	
+                }
+        	}, "json");
+    	}, "json");
     }, "json");
     $.get("/api/cluster-info/"+currentClusterName(), function (clusterInfo) {    
     	var alias = clusterInfo.ClusterAlias
     	var visualAlias = (alias ? alias : currentClusterName())
     	document.title = document.title.split(" - ")[0] + " - " + visualAlias;
     	$("#cluster_container").append('<div class="floating_background">'+visualAlias+'</div>');
+        $("#dropdown-context").append('<li><a data-command="change-cluster-alias" data-alias="'+clusterInfo.ClusterAlias+'">Alias: '+alias+'</a></li>');
+        $("#dropdown-context").append('<li><a href="/web/cluster-pools/'+currentClusterName()+'">Pools</a></li>');    
         if (isCompactDisplay()) {
             $("#dropdown-context").append('<li><a data-command="expand-display" href="'+location.href.split("?")[0]+'?compact=false">Expand display</a></li>');    
         } else {
             $("#dropdown-context").append('<li><a data-command="compact-display" href="'+location.href.split("?")[0]+'?compact=true">Compact display</a></li>');    
         }
+        $("#dropdown-context").append('<li><a data-command="pool-indicator">Pool indicator</a></li>');    
         $("#dropdown-context").append('<li><a data-command="colorize-dc">Colorize DC</a></li>');    
-        $("#dropdown-context").append('<li><a data-command="change-cluster-alias" data-alias="'+clusterInfo.ClusterAlias+'">Alias: '+alias+'</a></li>');
         $("#dropdown-context").append('<li><a data-command="anonymize">Anonymize</a></li>');    
-        if ($.cookie("anonymize") == "true") {
-        	$("#dropdown-context a[data-command=anonymize]").prepend('<span class="glyphicon glyphicon-ok"></span> ');
+        if ($.cookie("pool-indicator") == "true") {
+        	$("#dropdown-context a[data-command=pool-indicator]").prepend('<span class="glyphicon glyphicon-ok small"></span> ');
         } 
+        if ($.cookie("anonymize") == "true") {
+        	$("#dropdown-context a[data-command=anonymize]").prepend('<span class="glyphicon glyphicon-ok small"></span> ');
+        } 
+        if ($.cookie("colorize-dc") == "true") {
+        	$("#dropdown-context a[data-command=colorize-dc]").prepend('<span class="glyphicon glyphicon-ok small"></span> ');
+        } 
+        populateSidebar(clusterInfo);
 
+    }, "json");
+    
+    $.get("/api/active-cluster-recovery/"+currentClusterName(), function (recoveries) {
+        // Result is an array: either empty (no active recovery) or with multiple entries
+    	recoveries.forEach(function (recoveryEntry) {
+    		addInfo("<strong>" + recoveryEntry.AnalysisEntry.Analysis + " active recovery in progress.</strong> Topology is subject to change in the next moments.");
+        });
+    }, "json");
+    $.get("/api/recently-active-cluster-recovery/"+currentClusterName(), function (recoveries) {
+        // Result is an array: either empty (no active recovery) or with multiple entries
+    	recoveries.forEach(function (recoveryEntry) {
+    		addInfo("This cluster just recently recovered from <strong>" + recoveryEntry.AnalysisEntry.Analysis + "</strong>. It may still take some time to rebuild topology graph.");
+        });
+    }, "json");
+    $.get("/api/cluster-osc-slaves/"+currentClusterName(), function (instances) {
+		var instancesMap = normalizeInstances(instances, Array());
+		var instancesTitles = Array();
+	    instances.forEach(function (instance) {
+	    	instancesTitles.push(instance.title);
+	    });
+	    var instancesTitlesConcatenates = instancesTitles.join(" ");
+    	var content = "Heuristic list of OSC controller slaves: <pre>"+instancesTitlesConcatenates+"</pre>"; 
+		;
+    	addSidebarInfoPopoverContent(content);
     }, "json");
     
     if (isPseudoGTIDModeEnabled()) {
@@ -688,14 +978,26 @@ $(document).ready(function () {
         
 	    $("body").on("click", "#cluster_operation_mode_button", function() {
 	    	clusterOperationPseudoGTIDMode = !clusterOperationPseudoGTIDMode;
+	    	$.cookie("operation-pgtid-mode", ""+clusterOperationPseudoGTIDMode, { path: '/', expires: 1 });
 	    	refreshClusterOperationModeButton(); 
 	    });
     }
-    $("#instance_problems button").html("Cluster " + $("#instance_problems button").html())
-    
+    $("#instance_problems_button").attr("title", "Cluster Problems");
     
     $("body").on("click", "a[data-command=change-cluster-alias]", function(event) {    	
     	promptForAlias($(event.target).attr("data-alias"));
+    });    
+    $("body").on("click", "a[data-command=cluster-osc-slaves]", function(event) {    	
+    	showOSCSlaves();
+    });    
+    $("body").on("click", "a[data-command=pool-indicator]", function(event) {
+    	if ($.cookie("pool-indicator") == "true") {
+    		$.cookie("pool-indicator", "false", { path: '/', expires: 1 });
+    		location.reload();
+    		return
+        }
+    	$.cookie("pool-indicator", "true", { path: '/', expires: 1 });
+		location.reload();
     });    
     $("body").on("click", "a[data-command=anonymize]", function(event) {
     	if ($.cookie("anonymize") == "true") {
@@ -704,16 +1006,23 @@ $(document).ready(function () {
     		return
         }
     	anonymize();
-    	$("#dropdown-context a[data-command=anonymize]").prepend('<span class="glyphicon glyphicon-ok"></span> ');
+    	$("#dropdown-context a[data-command=anonymize]").prepend('<span class="glyphicon glyphicon-ok small"></span> ');
     	$.cookie("anonymize", "true", { path: '/', expires: 1 });
     });    
     $("body").on("click", "a[data-command=colorize-dc]", function(event) {
-        $(".popover.instance[data-dc-color]").each(function () {
-            $(this).css("border-color", $(this).attr("data-dc-color"));
-            $(this).css("border-width", 2);
-        });
+    	if ($.cookie("colorize-dc") == "true") {
+    		$.cookie("colorize-dc", "false", { path: '/', expires: 1 });
+    		location.reload();
+    		return
+        }
+    	colorize_dc();
+    	$("#dropdown-context a[data-command=colorize-dc]").prepend('<span class="glyphicon glyphicon-ok small"></span> ');
+    	$.cookie("colorize-dc", "true", { path: '/', expires: 1 });
     });    
 
+    $("[data-toggle=popover]").popover();
+    $("[data-toggle=popover]").show();
+    
     if (isAuthorizedForAction()) {
     	// Read-only users don't get auto-refresh. Sorry!
     	activateRefreshTimer();

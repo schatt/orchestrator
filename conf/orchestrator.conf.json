@@ -16,21 +16,18 @@
   "DiscoverByShowSlaveHosts": true,
   "DiscoveryPollSeconds": 5,
   "InstancePollSeconds": 12,
-  "InstanceBulkOperationsWaitTimeoutSeconds":60,
+  "InstanceBulkOperationsWaitTimeoutSeconds":10,
   "ActiveNodeExpireSeconds": 20,
   "HostnameResolveMethod": "default",
+  "MySQLHostnameResolveMethod": "default",
   "ExpiryHostnameResolvesMinutes": 60,
   "RejectHostnameResolvePattern": "",
   "UnseenInstanceForgetHours": 240,
+  "CandidateInstanceExpireMinutes": 60,
+  "SnapshotTopologiesIntervalHours": 0,
   "ReasonableReplicationLagSeconds": 10,
   "VerifyReplicationFilters": false,
   "ReasonableMaintenanceReplicationLagSeconds": 20,
-  "PreFailoverProcesses": [
-  	"echo 'Cluster is: {failureCluster}. Reason: {failureDescription}' >> /tmp/recovery.log"
-  ],
-  "PostFailoverProcesses": [
-  	"echo 'failed over:' h:{failedHost} p:{failedPort} th:{successorHost} tp:{successorPort}"
-  ],
   "AuditLogFile": "/tmp/orchestrator-audit.log",
   "AuditPageSize": 20,
   "SlaveStartPostWaitMilliseconds": 1000,
@@ -57,16 +54,36 @@
   "StaleSeedFailMinutes": 60,
   "SeedAcceptableBytesDiff": 8192,
   "PseudoGTIDPattern": "drop view if exists .*?`_pseudo_gtid_hint__",
+  "PseudoGTIDMonotonicHint": "asc:",
   "DetectPseudoGTIDQuery": "select count(*) as pseudo_gtid_exists from meta.pseudo_gtid_status where anchor = 1 and time_generated > now() - interval 2 day",
   "BinlogEventsChunkSize": 10000,
-  "RecoveryPeriodBlockMinutes": 1,
+  "RecoveryPeriodBlockMinutes": 60,
+  "PromotionIgnoreHostnameFilters": [
+  ], 
+  "OSCIgnoreHostnameFilters": [
+  ],
   "RecoveryIgnoreHostnameFilters": [
   ],
   "RecoverMasterClusterFilters": [
-  	"kvmuser"
+  	"kvmuser__"
   ],
   "RecoverIntermediateMasterClusterFilters": [
-  	"kvmuser"
+  	"kvmuser__"
+  ],
+  "OnFailureDetectionProcesses": [
+  	"echo 'Detected {failureType} on {failureCluster}. Affected slaves: {countSlaves}' >> /tmp/recovery.log"
+  ], 
+  "PreFailoverProcesses": [
+  	"echo 'Will recover from {failureType} on {failureCluster}' >> /tmp/recovery.log"
+  ],
+  "PostFailoverProcesses": [
+  	"echo '(for all types) Recovered from {failureType} on {failureCluster}. Failed: {failedHost}:{failedPort}; Successor: {successorHost}:{successorPort}' >> /tmp/recovery.log"
+  ],
+  "PostMasterFailoverProcesses": [
+  	"echo 'Recovered from {failureType} on {failureCluster}. Failed: {failedHost}:{failedPort}; Promoted: {successorHost}:{successorPort}' >> /tmp/recovery.log"
+  ],
+  "PostIntermediateMasterFailoverProcesses": [
+  	"echo 'Recovered from {failureType} on {failureCluster}. Failed: {failedHost}:{failedPort}; Successor: {successorHost}:{successorPort}' >> /tmp/recovery.log"
   ]
 }
 
